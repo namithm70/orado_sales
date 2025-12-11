@@ -11,7 +11,7 @@ import '../model/cod_model.dart';
 import '../model/cod_submit_model.dart'; // Import for debugPrint
 
 class AgentHomeService {
-  final String baseUrl = 'https://orado-backend.onrender.com/agent/home-data';
+  final String baseUrl = 'https://orado.online/backend/agent/home-data';
 
   Future<AgentHomeModel?> fetchAgentHomeData() async {
     final prefs = await SharedPreferences.getInstance();

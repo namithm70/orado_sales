@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:oradosales/presentation/orders/provider/order_details_provider.dart';
+import 'package:oradosales/presentation/orders/provider/order_details_provider.dart' hide AgentOrderResponseController;
 import 'package:oradosales/presentation/orders/provider/order_response_controller.dart';
 import 'package:oradosales/presentation/orders/view/task_details.dart';
 import 'package:provider/provider.dart';
@@ -32,6 +32,34 @@ enum DeliveryStage {
   reachedCustomer, // reached_customer
   completed, // delivered
 }
+DeliveryStage mapBackendStatus(String status) {
+  switch (status) {
+    case "awaiting_start":
+      return DeliveryStage.awaitingStart;
+
+    case "start_journey_to_restaurant":
+      return DeliveryStage.goingToPickup;
+
+    case "reached_restaurant":
+      return DeliveryStage.atPickup;
+
+    case "picked_up":
+      return DeliveryStage.goingToCustomer;
+
+    case "out_for_delivery":
+      return DeliveryStage.outForDelivery;
+
+    case "reached_customer":
+      return DeliveryStage.reachedCustomer;
+
+    case "delivered":
+      return DeliveryStage.completed;
+
+    default:
+      return DeliveryStage.notStarted;
+  }
+}
+
 
 // ---------------- WIDGET ---------------- //
 
@@ -75,11 +103,16 @@ class _OrderDetailsBottomSheetState extends State<OrderDetailsBottomSheet> {
   final GlobalKey _arrivalSectionKey = GlobalKey();
   final GlobalKey _deliverySectionKey = GlobalKey();
 
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<OrderDetailController>().loadOrderDetails(widget.orderId);
+        print("🔥 BottomSheet INIT");
+    print("🔥 OrderId = ${widget.orderId}");
+    print("🔥 Provider available = ${context.read<OrderDetailController>() != null}");
+
+    context.read<OrderDetailController>().loadOrderDetails(widget.orderId);
       _startAgentLocationUpdates();
     });
   }
@@ -260,6 +293,9 @@ class _OrderDetailsBottomSheetState extends State<OrderDetailsBottomSheet> {
         }
 
         final order = controller.order!;
+        if (order.agentDeliveryStatus != null) {
+  _stage = mapBackendStatus(order.agentDeliveryStatus.toLowerCase());
+}
         _tryInitializeStaticMap();
 
         return Container(
@@ -500,54 +536,90 @@ class _OrderDetailsBottomSheetState extends State<OrderDetailsBottomSheet> {
 
   // ---------------- Accept / Reject ---------------- //
 
-  Widget _buildAcceptRejectButtons(dynamic order) {
-    if (order.showAcceptReject != true) {
-      return const SizedBox.shrink();
-    }
-
-    return Column(
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: ElevatedButton(
-                onPressed: () => _respondToOrder("accept"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text(
-                  "Accept Order",
-                  style: TextStyle(fontSize: 16, color: Colors.white),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: ElevatedButton(
-                onPressed: () => _respondToOrder("reject"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text(
-                  "Reject",
-                  style: TextStyle(fontSize: 16, color: Colors.white),
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-      ],
-    );
+Widget _buildAcceptRejectButtons(dynamic order) {
+  if (order.showAcceptReject != true) {
+    return const SizedBox.shrink();
   }
+
+  final responseController = context.watch<AgentOrderResponseController>();
+  final isLoading = responseController.isLoading;
+
+  return Column(
+    children: [
+      Row(
+        children: [
+          // ---------- ACCEPT BUTTON ----------
+          Expanded(
+            child: ElevatedButton(
+              onPressed: isLoading
+                  ? null
+                  : () async {
+                      await _respondToOrder("accept");
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: isLoading
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Text(
+                      "Accept Order",
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+            ),
+          ),
+
+          const SizedBox(width: 12),
+
+          // ---------- REJECT BUTTON ----------
+          Expanded(
+            child: ElevatedButton(
+              onPressed: isLoading
+                  ? null
+                  : () async {
+                      await _respondToOrder("reject");
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: isLoading
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Text(
+                      "Reject",
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+            ),
+          ),
+        ],
+      ),
+
+      const SizedBox(height: 16),
+    ],
+  );
+}
+
+
 
   Future<void> _respondToOrder(String action) async {
     final agentController = context.read<AgentOrderResponseController>();

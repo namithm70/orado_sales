@@ -14,6 +14,11 @@ class OrderDetailController extends ChangeNotifier {
   String? successMessage;
 
   Order? get order => orderDetails?.order;
+  bool isSlideLoading = false;
+  void setSlideLoading(bool value) {
+  isSlideLoading = value;
+  notifyListeners();
+}
 
   // ---------------- LOAD ORDER DETAILS (NO LOADING INDICATOR) ---------------- //
 
@@ -51,6 +56,7 @@ class OrderDetailController extends ChangeNotifier {
     if (order == null) return false;
 
     try {
+          setSlideLoading(true);     
       final token = await _getUserToken();
 
       final response = await _service.updateDeliveryStatus(
@@ -58,7 +64,7 @@ class OrderDetailController extends ChangeNotifier {
         status: status,
         token: token,
       );
-
+    setSlideLoading(false);     // 👉 STOP loading
       if (response != null && response.message != null) {
         successMessage = response.message!;
         loadOrderDetails(order!.id); // async refresh
@@ -68,6 +74,7 @@ class OrderDetailController extends ChangeNotifier {
       return false;
 
     } catch (e) {
+          setSlideLoading(false); 
       errorMessage = e.toString();
       log('Status update error: $e');
       return false;
