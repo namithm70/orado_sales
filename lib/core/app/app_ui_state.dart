@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 enum VisibleScreen {
   splash,
+  login,
   home,
   orderDetails,
 }

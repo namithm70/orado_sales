@@ -1,8 +1,8 @@
 import 'dart:developer';
 import 'package:flutter/material.dart';
 import 'package:oradosales/core/app/app_ui_state.dart';
+import 'package:oradosales/presentation/auth/view/login.dart';
 import 'package:oradosales/presentation/home/main_screen.dart';
-import 'package:oradosales/presentation/home/screen/home.dart';
 import 'package:oradosales/presentation/orders/view/new_task_screen.dart';
 import 'package:oradosales/presentation/splash_Screen/splash_screen.dart';
 
@@ -23,12 +23,15 @@ class AppRoot extends StatelessWidget {
             log('🟩 [AppRoot] Rendering NewTaskScreen');
             return const NewTaskScreen();
 
+          case VisibleScreen.login:
+            log('🟧 [AppRoot] Rendering LoginScreen');
+            return const LoginScreen();
+
           case VisibleScreen.home:
             log('🟨 [AppRoot] Rendering HomeScreen');
             return const  MainScreen();
 
           case VisibleScreen.splash:
-          default:
             log('🟥 [AppRoot] Rendering SplashScreen');
             return const SplashScreen();
         }

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:oradosales/presentation/orders/view/order_details_screen.dart';
+import 'package:provider/provider.dart';
+import 'package:oradosales/presentation/orders/provider/order_details_provider.dart';
 
-class OrderDetailsScreen extends StatelessWidget {
+class OrderDetailsScreen extends StatefulWidget {
   final dynamic order;
 
   const OrderDetailsScreen({
@@ -10,7 +12,40 @@ class OrderDetailsScreen extends StatelessWidget {
   });
 
   @override
+  State<OrderDetailsScreen> createState() => _OrderDetailsScreenState();
+}
+
+class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Ensure this screen stays updated with latest delivery status.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        final orderId = (widget.order.id ?? '').toString();
+        if (orderId.isNotEmpty) {
+          await context.read<OrderDetailController>().loadOrderDetails(orderId);
+        }
+      } catch (_) {
+        // If widget.order doesn't have expected shape, ignore and fallback to passed order.
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    return Consumer<OrderDetailController>(
+      builder: (context, detailController, _) {
+        // Prefer live order details if they match this orderId.
+        dynamic currentOrder = widget.order;
+        try {
+          final orderId = (widget.order.id ?? '').toString();
+          final live = detailController.order;
+          if (live != null && live.id.toString() == orderId) {
+            currentOrder = live;
+          }
+        } catch (_) {}
+
     return Scaffold(
       backgroundColor: Colors.black,
 
@@ -46,12 +81,12 @@ class OrderDetailsScreen extends StatelessWidget {
                 /// PICKUP
                 _timelineTile(
                   context: context,
-                  time: _formatTime(order.createdAt),
+                  time: _formatTime(currentOrder.createdAt),
                   title: "Pickup",
-                  status: _pickupStatus(order),
-                  orderId: order.id,
+                  status: _pickupStatus(currentOrder),
+                  orderId: currentOrder.id,
                   address:
-                      "${order.restaurant.name}, Mavelikara, Kerala, India",
+                      "${currentOrder.restaurant.name}, Mavelikara, Kerala, India",
                   isLast: false,
                 ),
 
@@ -59,14 +94,15 @@ class OrderDetailsScreen extends StatelessWidget {
                 _timelineTile(
                   context: context,
                   time: _formatTime(
-                    order.createdAt.add(const Duration(minutes: 20)),
+                    currentOrder.createdAt.add(const Duration(minutes: 20)),
                   ),
                   title: "Delivery",
-                  status: _deliveryStatus(order),
-                  orderId: order.id,
+                  status: _deliveryStatus(currentOrder),
+                  orderId: currentOrder.id,
                   address:
-                      "${order.deliveryAddress.city}, ${order.deliveryAddress.state}, India",
+                      "${currentOrder.deliveryAddress.city}, ${currentOrder.deliveryAddress.state}, India",
                   isLast: true,
+                  enabled: _isPickupCompleted(currentOrder),
                 ),
 
                 const Spacer(),
@@ -77,25 +113,47 @@ class OrderDetailsScreen extends StatelessWidget {
       ),
     );
   }
+    );
+  }
 
   // ---------------- STATUS LOGIC ----------------
 
-  String _pickupStatus(dynamic order) {
-    final s = order.agentDeliveryStatus;
-    if (s == "reached_restaurant" || s == "picked_up") {
-      return "Completed";
-    }
-    return "Pending";
+  bool _isPickupCompleted(dynamic order) {
+    final s = (order.agentDeliveryStatus ?? '').toString().toLowerCase();
+    return s == "picked_up" ||
+        s == "out_for_delivery" ||
+        s == "reached_customer" ||
+        s == "delivered";
   }
 
-  String _deliveryStatus(dynamic order) {
-    final s = order.agentDeliveryStatus;
+  String _pickupStatus(dynamic order) {
+    final s = (order.agentDeliveryStatus ?? '').toString().toLowerCase();
+
+    // Pickup is completed only once rider has picked up.
     if (s == "picked_up" ||
         s == "out_for_delivery" ||
         s == "reached_customer" ||
         s == "delivered") {
+      return "Completed";
+    }
+
+    if (s == "start_journey_to_restaurant" || s == "reached_restaurant") {
       return "In Progress";
     }
+
+    return "Pending";
+  }
+
+  String _deliveryStatus(dynamic order) {
+    final s = (order.agentDeliveryStatus ?? '').toString().toLowerCase();
+
+    if (s == "delivered") return "Completed";
+
+    // Delivery starts after pickup completed.
+    if (s == "picked_up" || s == "out_for_delivery" || s == "reached_customer") {
+      return "In Progress";
+    }
+
     return "Pending";
   }
 
@@ -109,17 +167,30 @@ class OrderDetailsScreen extends StatelessWidget {
     required String orderId,
     required String address,
     required bool isLast,
+    bool enabled = true,
   }) {
     return InkWell(
-      onTap: () {
-        context.showOrderBottomSheet(orderId, () {});
-      },
+      onTap: enabled
+          ? () {
+              context.showOrderBottomSheet(orderId, () {});
+            }
+          : () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text("Complete Pickup first to unlock Delivery"),
+                ),
+              );
+            },
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Column(
             children: [
-              const Icon(Icons.circle, color: Colors.white, size: 10),
+              Icon(
+                enabled ? Icons.circle : Icons.lock,
+                color: enabled ? Colors.white : Colors.white54,
+                size: 10,
+              ),
               if (!isLast)
                 Container(height: 70, width: 1, color: Colors.white38),
             ],
@@ -151,7 +222,10 @@ class OrderDetailsScreen extends StatelessWidget {
                       style: const TextStyle(color: Colors.white70, fontSize: 12),
                     ),
                     const Spacer(),
-                    const Icon(Icons.chevron_right, color: Colors.white54),
+                    Icon(
+                      enabled ? Icons.chevron_right : Icons.lock,
+                      color: Colors.white54,
+                    ),
                   ],
                 ),
                 const SizedBox(height: 6),

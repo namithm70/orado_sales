@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:oradosales/presentation/orders/provider/order_details_provider.dart' hide AgentOrderResponseController;
+import 'package:oradosales/presentation/orders/provider/order_details_provider.dart';
 import 'package:oradosales/presentation/orders/provider/order_provider.dart';
 import 'package:oradosales/presentation/orders/provider/order_response_controller.dart';
 import 'package:oradosales/presentation/orders/view/task_details.dart';
@@ -61,6 +61,8 @@ DeliveryStage mapBackendStatus(String status) {
   }
 }
 
+enum ActiveSection { pickup, delivery }
+
 
 // ---------------- WIDGET ---------------- //
 
@@ -100,11 +102,47 @@ class _OrderDetailsBottomSheetState extends State<OrderDetailsBottomSheet> {
   double _slideProgress = 0.0; // 0 → 1
   bool _isSliding = false; // Prevent stage from being overwritten during slide
   bool _hasRespondedToOrder = false; // Hide buttons immediately after response
+  bool _pickupCompleted = false; // sticky once picked_up is reached
+  ActiveSection _activeSection = ActiveSection.pickup;
 
   // Scroll targets for sections
   final GlobalKey _pickupSectionKey = GlobalKey();
   final GlobalKey _arrivalSectionKey = GlobalKey();
   final GlobalKey _deliverySectionKey = GlobalKey();
+
+  int _stageRank(DeliveryStage s) {
+    switch (s) {
+      case DeliveryStage.awaitingStart:
+      case DeliveryStage.notStarted:
+        return 0;
+      case DeliveryStage.goingToPickup:
+        return 1;
+      case DeliveryStage.atPickup:
+        return 2;
+      case DeliveryStage.goingToCustomer: // picked_up
+        return 3;
+      case DeliveryStage.outForDelivery:
+        return 4;
+      case DeliveryStage.reachedCustomer:
+        return 5;
+      case DeliveryStage.completed:
+        return 6;
+    }
+  }
+
+  bool _isPickupStageOrBeyond(DeliveryStage s) =>
+      _stageRank(s) >= _stageRank(DeliveryStage.goingToCustomer);
+
+  Future<void> _scrollToSection(GlobalKey key) async {
+    final ctx = key.currentContext;
+    if (ctx == null) return;
+    await Scrollable.ensureVisible(
+      ctx,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeInOut,
+      alignment: 0.1,
+    );
+  }
 
 
   @override
@@ -113,7 +151,7 @@ class _OrderDetailsBottomSheetState extends State<OrderDetailsBottomSheet> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
         print("🔥 BottomSheet INIT");
     print("🔥 OrderId = ${widget.orderId}");
-    print("🔥 Provider available = ${context.read<OrderDetailController>() != null}");
+    print("🔥 Provider available = true");
 
     context.read<OrderDetailController>().loadOrderDetails(widget.orderId);
       _startAgentLocationUpdates();
@@ -297,8 +335,31 @@ void dispose() {
 
         final order = controller.order!;
         // Only update stage from backend if not currently sliding
-        if (order.agentDeliveryStatus != null && !_isSliding) {
-          _stage = mapBackendStatus(order.agentDeliveryStatus.toLowerCase());
+        if (!_isSliding) {
+          final backendStage = mapBackendStatus(
+            order.agentDeliveryStatus.toLowerCase(),
+          );
+
+          // Never allow stage to go backwards (backend can lag for a moment).
+          if (_stageRank(backendStage) > _stageRank(_stage)) {
+            _stage = backendStage;
+          }
+
+          // Sticky pickup complete flag
+          if (_isPickupStageOrBeyond(_stage)) {
+            _pickupCompleted = true;
+          }
+
+          // If pickup is completed, automatically switch UI to Delivery section
+          // so the delivery slider becomes visible (and pickup bar doesn't show there).
+          if (_pickupCompleted && _activeSection == ActiveSection.pickup) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              setState(() {
+                _activeSection = ActiveSection.delivery;
+              });
+            });
+          }
             }
         // Reset response flag if order no longer shows accept/reject
         if (order.showAcceptReject != true && _hasRespondedToOrder) {
@@ -397,9 +458,14 @@ void dispose() {
                     ),
 
                     // Pickup section (for scroll target)
-                    Container(
-                      key: _pickupSectionKey,
-                                  child: Row(
+                    GestureDetector(
+                      onTap: () async {
+                        setState(() => _activeSection = ActiveSection.pickup);
+                        await _scrollToSection(_pickupSectionKey);
+                      },
+                      child: Container(
+                        key: _pickupSectionKey,
+                        child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
                           Row(
@@ -410,22 +476,11 @@ void dispose() {
                               Text('${_formatTime(order.createdAt)} - Pickup'),
                             ],
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.purple.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              _getStatusBadge(order.status),
-                                        style: const TextStyle(
-                                  color: Colors.purple, fontSize: 10),
-                                        ),
-                                      ),
+                          _statusPill(_pickupTimelineStatus(order)),
                                     ],
                                   ),
-                                ),
+                      ),
+                    ),
 
                     const SizedBox(height: 22),
 
@@ -452,31 +507,63 @@ void dispose() {
                     const SizedBox(height: 20),
 
                     // Delivery section (for scroll target)
-                    Container(
-                      key: _deliverySectionKey,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Row(
-                              children: [
-                                const Icon(Icons.location_on,
-                                    color: Colors.white),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    "${order.deliveryAddress.city}, ${order.deliveryAddress.state}, India",
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
+                    GestureDetector(
+                      onTap: () async {
+                        if (!_isPickupCompletedBySlider()) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                "Complete Pickup first to unlock Delivery",
+                              ),
                             ),
-                          ),
-                          _circleBtn(Icons.navigation, Colors.blue, () {
-                            _openNavigation(order.deliveryLocation.latitude,
-                                order.deliveryLocation.longitude);
-                          }),
-                        ],
+                          );
+                          return;
+                        }
+                        setState(() => _activeSection = ActiveSection.delivery);
+                        await _scrollToSection(_deliverySectionKey);
+                      },
+                      child: Container(
+                        key: _deliverySectionKey,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.location_on,
+                                    color: Colors.white,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      "${order.deliveryAddress.city}, ${order.deliveryAddress.state}, India",
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            _statusPill(_deliveryTimelineStatus(order)),
+                            const SizedBox(width: 10),
+                            _circleBtn(
+                              _isPickupCompletedBySlider()
+                                  ? Icons.navigation
+                                  : Icons.lock,
+                              _isPickupCompletedBySlider()
+                                  ? Colors.blue
+                                  : Colors.grey,
+                              () {
+                                if (!_isPickupCompletedBySlider()) return;
+                                _openNavigation(
+                                  order.deliveryLocation.latitude,
+                                  order.deliveryLocation.longitude,
+                                );
+                              },
+                              enabled: _isPickupCompletedBySlider(),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
 
@@ -528,24 +615,100 @@ void dispose() {
             ),
           ),
 
-          // Pinned action area at bottom (Accept/Reject + Slide)
+          // Pinned action area at bottom (Accept/Reject + Slider)
           SafeArea(
             top: false,
             child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                child: Column(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              child: Column(
                 mainAxisSize: MainAxisSize.min,
-                  children: [
+                children: [
                   _buildAcceptRejectButtons(order),
-                  if (order.showAcceptReject != true) _buildSlideButton(),
-                        ],
-              ),
-                      ),
-                    ),
+                  if (order.showAcceptReject != true) ...[
+                    if (_activeSection == ActiveSection.pickup) ...[
+                      // Pickup: show pickup slider only until pickup is completed.
+                      if (_isPickupCompletedBySlider()) ...[
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withOpacity(0.18),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: Colors.green.withOpacity(0.45),
+                            ),
+                          ),
+                          child: const Row(
+                            children: [
+                              Icon(Icons.check_circle,
+                                  color: Colors.green, size: 18),
+                              SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  "Pickup Completed",
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ] else ...[
+                        _buildSlideButton(),
+                      ],
+                    ] else ...[
+                      // Delivery: show delivery slider only after pickup is completed.
+                      if (!_isPickupCompletedBySlider())
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: Colors.grey.withOpacity(0.35),
+                            ),
+                          ),
+                          child: const Row(
+                            children: [
+                              Icon(Icons.lock,
+                                  color: Colors.white54, size: 18),
+                              SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  "Complete Pickup to start Delivery",
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        _buildSlideButton(),
+                    ],
                   ],
-                ),
-              );
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   // ---------------- Accept / Reject ---------------- //
@@ -889,6 +1052,11 @@ Widget _buildAcceptRejectButtons(dynamic order) {
   if (!mounted) return;
 
   if (success) {
+    // Sticky pickup complete: once we reach picked_up stage, keep it.
+    if (_isPickupStageOrBeyond(newStage)) {
+      _pickupCompleted = true;
+    }
+
     // Refresh orders list
     context.read<OrderController>().fetchOrders();
     
@@ -983,13 +1151,21 @@ Widget _buildAcceptRejectButtons(dynamic order) {
 
   // ---------------- Helpers ---------------- //
 
-  Widget _circleBtn(IconData icon, Color color, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        child: Icon(icon, color: Colors.white, size: 20),
+  Widget _circleBtn(
+    IconData icon,
+    Color color,
+    VoidCallback onTap, {
+    bool enabled = true,
+  }) {
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.55,
+      child: GestureDetector(
+        onTap: enabled ? onTap : null,
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          child: Icon(icon, color: Colors.white, size: 20),
+        ),
       ),
     );
   }
@@ -1038,32 +1214,6 @@ Widget _buildAcceptRejectButtons(dynamic order) {
     );
   }
 
-  Widget _loadingSheet() {
-    return Container(
-      height: 300,
-      decoration: const BoxDecoration(
-        color: Colors.black,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-                ),
-      child: const Center(
-        child: CircularProgressIndicator(color: Colors.white),
-      ),
-    );
-  }
-
-  Widget _errorSheet() {
-    return Container(
-      height: 200,
-      decoration: const BoxDecoration(
-        color: Colors.black,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: const Center(
-        child: Text("Order not found", style: TextStyle(color: Colors.white)),
-      ),
-      );
-  }
-
   String _formatTime(DateTime date) {
     int hour = date.hour;
     final minute = date.minute.toString().padLeft(2, "0");
@@ -1073,24 +1223,89 @@ Widget _buildAcceptRejectButtons(dynamic order) {
     return "$hour:$minute $period";
   }
 
-  String _getStatusBadge(String status) {
-    switch (status.toLowerCase()) {
-      case "pending":
-        return "Pending";
-      case "confirmed":
-      case "accepted":
-        return "Acknowledged";
-      case "preparing":
-        return "Preparing";
-      case "ready":
-        return "Ready";
-      case "picked_up":
-        return "Picked Up";
-      case "delivered":
-        return "Delivered";
-      default:
-        return status.toUpperCase();
+  // ---------------- PICKUP/DELIVERY TIMELINE STATUS ---------------- //
+  bool _isPickupCompletedBySlider() {
+    // Use sticky bool so UI doesn't flicker if backend sends older state briefly.
+    return _pickupCompleted || _isPickupStageOrBeyond(_stage);
+  }
+
+  String _pickupTimelineStatus(dynamic order) {
+    // Drive pickup/delivery sections from the rider flow, not restaurant status.
+    // Backend `agentDeliveryStatus` values (seen in this file):
+    // awaiting_start, start_journey_to_restaurant, reached_restaurant,
+    // picked_up, out_for_delivery, reached_customer, delivered
+    final agentStatus =
+        (order.agentDeliveryStatus ?? '').toString().toLowerCase();
+
+    // Pickup is completed only once the rider has picked up the order.
+    if (agentStatus == 'picked_up' ||
+        agentStatus == 'out_for_delivery' ||
+        agentStatus == 'reached_customer' ||
+        agentStatus == 'delivered') {
+      return "Completed";
     }
+
+    // Rider has started / reached restaurant → pickup in progress
+    if (agentStatus == 'start_journey_to_restaurant' ||
+        agentStatus == 'reached_restaurant') {
+      return "In Progress";
+    }
+
+    return "Pending";
+  }
+
+  String _deliveryTimelineStatus(dynamic order) {
+    final agentStatus =
+        (order.agentDeliveryStatus ?? '').toString().toLowerCase();
+
+    if (agentStatus == 'delivered') {
+      return "Completed";
+    }
+
+    // Delivery starts only after pickup is completed (picked_up onwards)
+    if (agentStatus == 'picked_up' ||
+        agentStatus == 'out_for_delivery' ||
+        agentStatus == 'reached_customer') {
+      return "In Progress";
+    }
+
+    return "Pending";
+  }
+
+  Widget _statusPill(String status) {
+    final Color bg;
+    final Color fg;
+
+    switch (status) {
+      case "Completed":
+        bg = Colors.green.withOpacity(0.2);
+        fg = Colors.greenAccent;
+        break;
+      case "In Progress":
+        bg = Colors.purple.withOpacity(0.2);
+        fg = Colors.purpleAccent;
+        break;
+      default:
+        bg = Colors.grey.withOpacity(0.2);
+        fg = Colors.grey;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: fg.withOpacity(0.35)),
+      ),
+      child: Text(
+        status,
+        style: TextStyle(
+          color: fg,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
   }
 
   // ---------------- LAUNCHERS ---------------- //

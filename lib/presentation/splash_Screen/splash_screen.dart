@@ -36,8 +36,8 @@ class _SplashScreenState extends State<SplashScreen> {
     /// ⏱️ Safety timeout (never stay on splash forever)
     _timeoutTimer = Timer(const Duration(seconds: 5), () {
       if (!_completed) {
-        log("⚠️ [Splash] Timeout reached → forcing HOME");
-        AppUIState.screen.value = VisibleScreen.home;
+        log("⚠️ [Splash] Timeout reached → forcing LOGIN");
+        AppUIState.screen.value = VisibleScreen.login;
       }
     });
   }
@@ -91,13 +91,13 @@ class _SplashScreenState extends State<SplashScreen> {
         AppUIState.screen.value = VisibleScreen.home;
         log("🟢 [Splash] Screen → HOME");
       } else {
-        log("🚪 [Splash] No token → HOME / LOGIN FLOW");
+        log("🚪 [Splash] No token → LOGIN");
 
         /// ❌ OLD
         /// Navigator.of(context).pushReplacement(LoginScreen)
         ///
         /// ✅ NEW
-        AppUIState.screen.value = VisibleScreen.home;
+        AppUIState.screen.value = VisibleScreen.login;
       }
 
       _completed = true;
@@ -109,7 +109,7 @@ class _SplashScreenState extends State<SplashScreen> {
       /// Navigator.of(context).pushReplacement(LoginScreen)
       ///
       /// ✅ NEW (FAIL SAFE)
-      AppUIState.screen.value = VisibleScreen.home;
+      AppUIState.screen.value = VisibleScreen.login;
     }
   }
 

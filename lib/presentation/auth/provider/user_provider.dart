@@ -1,27 +1,16 @@
 import 'dart:developer';
-import 'package:oradosales/presentation/profile_review_screen/profile_review_screen.dart';
 import 'package:oradosales/presentation/auth/model/login_model.dart';
 import 'package:oradosales/presentation/auth/service/selfi_status_service.dart';
-import 'package:oradosales/presentation/auth/view/login.dart';
 import 'package:oradosales/presentation/auth/view/selfi_screen.dart';
-import 'package:oradosales/presentation/home/main_screen.dart';
 import 'package:oradosales/services/device_info_service.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:oradosales/presentation/auth/service/login_reg_service.dart';
 import 'package:oradosales/presentation/notification_fcm/service/fcm_service.dart';
-import 'package:go_router/go_router.dart';
-import 'dart:io';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import 'package:device_info_plus/device_info_plus.dart';
-import 'package:battery_plus/battery_plus.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:oradosales/core/app/app_ui_state.dart';
 
 class AuthController extends ChangeNotifier {
   final AgentService _agentService = AgentService();
-  BuildContext? _context;
 
   String _message = '';
   String? _token;
@@ -33,10 +22,6 @@ class AuthController extends ChangeNotifier {
   String? get token => _token;
   String? get agentId => _agentId;
   bool get isLoading => _isLoading;
-
-  void setContext(BuildContext context) {
-    _context = context;
-  }
 
   AuthController() {
     log('AuthController initialized. Loading stored data...');
@@ -95,11 +80,8 @@ class AuthController extends ChangeNotifier {
     await clearStoredData();
     _message = 'You have been logged out.';
 
-    if (_context != null && _context!.mounted) {
-      Navigator.of(_context!).pushReplacement(
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
-      );
-    }
+    // State-driven navigation
+    AppUIState.screen.value = VisibleScreen.login;
   }
 
   Future<void> login(
@@ -122,9 +104,9 @@ class AuthController extends ChangeNotifier {
         try {
         final selfieStatus = await SelfieStatusService().fetchSelfieStatus();
         if (selfieStatus?.selfieRequired == true) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const UploadSelfieScreen()),
-          );
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => const UploadSelfieScreen()),
+            );
             // Continue with background tasks after navigation
             _performPostLoginTasks(response.agent.id);
             return;
@@ -134,10 +116,8 @@ class AuthController extends ChangeNotifier {
           // Continue with navigation even if selfie check fails
         }
 
-        // Navigate to main screen
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const MainScreen()),
-          );
+        // State-driven navigation to home
+        AppUIState.screen.value = VisibleScreen.home;
         }
 
       // ✅ Perform background tasks after navigation
