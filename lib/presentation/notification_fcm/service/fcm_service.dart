@@ -1,5 +1,6 @@
 import 'dart:developer';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:oradosales/core/app/app_ui_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -78,10 +79,27 @@ class FCMHandler {
       await _sendTokenToServer();
     });
 
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
-      log('Foreground message: ${message.data}');
-      await _showNotificationFromMessage(message);
-    });
+ FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
+  log('🟢 [FCM] onMessage triggered');
+
+  final String? orderId = message.data['orderId'];
+  log('🟡 [FCM] orderId = $orderId');
+
+  if (orderId == null) return;
+
+  // 🔥 DIRECT STATE CHANGE (NO postFrame)
+  AppUIState.orderId = orderId;
+  AppUIState.screen.value = VisibleScreen.orderDetails;
+
+  log('✅ [UI] Screen state changed');
+
+  await _showNotificationFromMessage(message);
+}
+
+
+
+    
+    );
 
     FirebaseMessaging.onBackgroundMessage(_firebaseBackgroundMessageHandler);
   }

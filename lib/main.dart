@@ -6,6 +6,7 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'; // ✅ ADDED
+import 'package:oradosales/core/app/app_route.dart';
 import 'package:permission_handler/permission_handler.dart'; // ✅ ADDED
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -187,7 +188,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(useMaterial3: true),
       home: AppLifecycleWrapper(
         socketController: socketController,
-        child: SplashScreen(),
+        child: AppRoot(),
       ),
     );
   }

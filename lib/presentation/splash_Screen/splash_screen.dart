@@ -1,15 +1,15 @@
 // lib/presentation/screens/splash_screen.dart
+
 import 'dart:async';
 import 'dart:developer';
 
-import 'package:oradosales/presentation/auth/provider/user_provider.dart';
-import 'package:oradosales/presentation/auth/service/selfi_status_service.dart';
-import 'package:oradosales/presentation/auth/view/selfi_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:oradosales/presentation/home/main_screen.dart';
-import 'package:oradosales/presentation/auth/view/login.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:oradosales/core/app/app_ui_state.dart'; // ✅ ADDED
+import 'package:oradosales/presentation/auth/provider/user_provider.dart';
+import 'package:oradosales/presentation/auth/service/selfi_status_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -20,109 +20,110 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen> {
   Timer? _timeoutTimer;
+  bool _completed = false; // ✅ prevents double execution
 
   @override
   void initState() {
     super.initState();
-    // Wait for the frame to be built before checking auth
+
+    log("🟥 [Splash] initState");
+
+    // Wait for first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
-    _checkAuthStatus();
+      _checkAuthStatus();
     });
-    
-    // Set a timeout to ensure we don't get stuck on splash screen
+
+    /// ⏱️ Safety timeout (never stay on splash forever)
     _timeoutTimer = Timer(const Duration(seconds: 5), () {
-      if (mounted) {
-        log("⚠️ Splash screen timeout reached, forcing navigation to login");
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const LoginScreen())
-        );
+      if (!_completed) {
+        log("⚠️ [Splash] Timeout reached → forcing HOME");
+        AppUIState.screen.value = VisibleScreen.home;
       }
     });
   }
-  
+
   @override
   void dispose() {
     _timeoutTimer?.cancel();
     super.dispose();
   }
 
+  /// --------------------------------------------------
+  /// 🔍 AUTH CHECK (STATE-DRIVEN, NO NAVIGATOR)
+  /// --------------------------------------------------
   Future<void> _checkAuthStatus() async {
     try {
-      log("🔍 Starting auth status check");
-      
-      // Cancel timeout timer since we're proceeding
+      log("🔍 [Splash] Starting auth status check");
+
       _timeoutTimer?.cancel();
-      
+
       final prefs = await SharedPreferences.getInstance();
       final fcmToken = prefs.getString('fcmToken') ?? '';
-      log("📱 FCM token: ${fcmToken.isEmpty ? 'not found' : 'exists'}");
+      log("📱 [Splash] FCM token: ${fcmToken.isEmpty ? 'not found' : 'exists'}");
 
       final authController = context.read<AuthController>();
-      
-      // Wait a bit for AuthController to finish loading stored data
+
+      // Give provider time to restore token
       await Future.delayed(const Duration(milliseconds: 100));
 
-      log("🔑 Auth token: ${authController.token != null ? 'exists' : 'null'}");
-      
-      if (authController.token != null && authController.token!.isNotEmpty) {
-        try {
-          // Add timeout to selfie status check to prevent hanging
-          final selfieStatus = await SelfieStatusService()
-              .fetchSelfieStatus()
-              .timeout(
-                const Duration(seconds: 3),
-                onTimeout: () {
-                  log("⏱️ Selfie status check timed out, defaulting to main screen");
-                  return null;
-                },
-              );
-          
-          log("📸 Selfie status: ${selfieStatus?.selfieRequired}");
+      final token = authController.token;
+      log("🔑 [Splash] Auth token: ${token != null && token.isNotEmpty ? 'exists' : 'null'}");
 
-          if (!mounted) return;
+      if (token != null && token.isNotEmpty) {
+        log("✅ [Splash] Token found → checking selfie status");
 
-            if (selfieStatus?.selfieRequired == true) {
-            log("➡️ Navigating to selfie screen");
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (_) => const UploadSelfieScreen())
+        final selfieStatus = await SelfieStatusService()
+            .fetchSelfieStatus()
+            .timeout(
+              const Duration(seconds: 3),
+              onTimeout: () {
+                log("⏱️ [Splash] Selfie check timeout → continue");
+                return null;
+              },
             );
-            } else {
-            log("➡️ Navigating to main screen");
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (_) => const MainScreen())
-            );
-          }
-        } catch (e) {
-          log("❌ Error checking selfie status: $e");
-          // If selfie check fails, default to main screen
-          if (mounted) {
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (_) => const MainScreen())
-            );
-          }
-        }
+
+        log("📸 [Splash] Selfie required: ${selfieStatus?.selfieRequired}");
+
+        /// ❌ OLD (REMOVED)
+        /// Navigator.of(context).pushReplacement(...)
+        ///
+        /// ✅ NEW (STATE BASED)
+        AppUIState.screen.value = VisibleScreen.home;
+        log("🟢 [Splash] Screen → HOME");
       } else {
-        log("➡️ No auth token, navigating to login");
-        if (mounted) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const LoginScreen())
-          );
-        }
+        log("🚪 [Splash] No token → HOME / LOGIN FLOW");
+
+        /// ❌ OLD
+        /// Navigator.of(context).pushReplacement(LoginScreen)
+        ///
+        /// ✅ NEW
+        AppUIState.screen.value = VisibleScreen.home;
       }
+
+      _completed = true;
     } catch (e, stackTrace) {
-      log("❌ Error in auth check: $e");
-      log("Stack trace: $stackTrace");
-      // Fallback to login screen if anything fails
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const LoginScreen())
-        );
-      }
+      log("❌ [Splash] Error in auth check: $e");
+      log("❌ [Splash] StackTrace: $stackTrace");
+
+      /// ❌ OLD
+      /// Navigator.of(context).pushReplacement(LoginScreen)
+      ///
+      /// ✅ NEW (FAIL SAFE)
+      AppUIState.screen.value = VisibleScreen.home;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(body: Center(child: Image.asset('asstes/oradoLogo.png', width: double.infinity, height: double.infinity)));
+    return Scaffold(
+      body: Center(
+        child: Image.asset(
+          'asstes/oradoLogo.png',
+          width: double.infinity,
+          height: double.infinity,
+          fit: BoxFit.contain,
+        ),
+      ),
+    );
   }
 }
