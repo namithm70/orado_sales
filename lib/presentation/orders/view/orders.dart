@@ -2,10 +2,8 @@ import 'dart:developer';
 
 import 'package:oradosales/presentation/orders/provider/order_provider.dart';
 import 'package:flutter/material.dart';
-import 'package:oradosales/presentation/orders/view/delivery_task_bottom_screen.dart';
 import 'package:provider/provider.dart';
-import 'package:oradosales/presentation/orders/model/product_model.dart';
-import 'package:oradosales/presentation/orders/view/order_details_screen.dart';
+import 'package:oradosales/presentation/orders/view/delivery_task_bottom_screen.dart';
 
 class OrdersListScreen extends StatefulWidget {
   static String route = 'ordersListScreen';
@@ -173,10 +171,9 @@ String getStatusActionLabel(String status) {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder:
-                                    (context) =>
-                                        OrderDetailsScreen(order: order.id!,),
-                            ));
+                                builder: (_) => OrderDetailsScreen(order: order),
+                              ),
+                            );
                           },
                           child: Padding(
                             padding: const EdgeInsets.all(16),

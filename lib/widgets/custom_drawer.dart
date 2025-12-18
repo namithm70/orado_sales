@@ -1,8 +1,6 @@
 import 'package:oradosales/constants/orado_icon_icons.dart';
-import 'package:oradosales/drawer/drawer_bloc.dart';
 import 'package:oradosales/presentation/auth/provider/user_provider.dart';
 import 'package:oradosales/presentation/auth/view/login.dart';
-import 'package:oradosales/presentation/home/chat_screen.dart';
 import 'package:oradosales/presentation/home/home/provider/available_provider.dart';
 import 'package:oradosales/presentation/home/home/provider/drawer_controller.dart';
 import 'package:oradosales/presentation/mileston/controller/milestone_controller.dart';
@@ -36,7 +34,7 @@ class CustomDrawer extends StatelessWidget {
         _,
       ) {
         final selectedIndex = drawerProvider.selectedIndex;
-        final agent = authController.currentAgent;
+        // final agent = authController.currentAgent;
         return Drawer(
           width: MediaQuery.sizeOf(context).width / 1.2,
           child: Padding(
@@ -164,7 +162,7 @@ class CustomDrawer extends StatelessWidget {
                   icon: SvgPicture.asset(
                     height: 25,
                     color: Colors.grey.shade500,
-                    'assets/images/logo.svg',
+                    'asstes/oradoLogo.png',
                   ),
                   label: 'Orado',
                 ),
