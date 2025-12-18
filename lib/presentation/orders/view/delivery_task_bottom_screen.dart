@@ -79,14 +79,14 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                 const SizedBox(height: 16),
 
                 /// PICKUP
-                _timelineTile(
+        _timelineTile(
                   context: context,
-                  time: _formatTime(currentOrder.createdAt),
+          time: _formatTime(currentOrder.createdAt),
                   title: "Pickup",
                   status: _pickupStatus(currentOrder),
-                  orderId: currentOrder.id,
+          orderId: currentOrder.id?.toString() ?? '',
                   address:
-                      "${currentOrder.restaurant.name}, Mavelikara, Kerala, India",
+                      "${currentOrder.restaurant?.name ?? ''}, Mavelikara, Kerala, India",
                   isLast: false,
                 ),
 
@@ -94,13 +94,13 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                 _timelineTile(
                   context: context,
                   time: _formatTime(
-                    currentOrder.createdAt.add(const Duration(minutes: 20)),
+                    (currentOrder.createdAt as DateTime?)?.add(const Duration(minutes: 20)),
                   ),
                   title: "Delivery",
                   status: _deliveryStatus(currentOrder),
-                  orderId: currentOrder.id,
+          orderId: currentOrder.id?.toString() ?? '',
                   address:
-                      "${currentOrder.deliveryAddress.city}, ${currentOrder.deliveryAddress.state}, India",
+                      "${currentOrder.deliveryAddress?.city ?? ''}, ${currentOrder.deliveryAddress?.state ?? ''}, India",
                   isLast: true,
                   enabled: _isPickupCompleted(currentOrder),
                 ),
@@ -118,8 +118,22 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
 
   // ---------------- STATUS LOGIC ----------------
 
+  String _getAgentStatus(dynamic order) {
+    // Orders list passes `AssignedOrder` which has `status`
+    // Order details passes `Order` which has `agentDeliveryStatus`
+    try {
+      final v = order.agentDeliveryStatus;
+      if (v is String) return v;
+    } catch (_) {}
+    try {
+      final v = order.status;
+      if (v is String) return v;
+    } catch (_) {}
+    return '';
+  }
+
   bool _isPickupCompleted(dynamic order) {
-    final s = (order.agentDeliveryStatus ?? '').toString().toLowerCase();
+    final s = _getAgentStatus(order).toLowerCase();
     return s == "picked_up" ||
         s == "out_for_delivery" ||
         s == "reached_customer" ||
@@ -127,7 +141,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   }
 
   String _pickupStatus(dynamic order) {
-    final s = (order.agentDeliveryStatus ?? '').toString().toLowerCase();
+    final s = _getAgentStatus(order).toLowerCase();
 
     // Pickup is completed only once rider has picked up.
     if (s == "picked_up" ||
@@ -145,7 +159,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   }
 
   String _deliveryStatus(dynamic order) {
-    final s = (order.agentDeliveryStatus ?? '').toString().toLowerCase();
+    final s = _getAgentStatus(order).toLowerCase();
 
     if (s == "delivered") return "Completed";
 
@@ -241,7 +255,8 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     );
   }
 
-  String _formatTime(DateTime date) {
+  String _formatTime(DateTime? date) {
+    if (date == null) return "--";
     int hour = date.hour;
     final minute = date.minute.toString().padLeft(2, '0');
     final period = hour >= 12 ? "PM" : "AM";
