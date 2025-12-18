@@ -12,7 +12,6 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_background_service_android/flutter_background_service_android.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 import '../../services/navigation_service.dart';
@@ -78,17 +77,10 @@ class SocketController extends ChangeNotifier {
     try {
       final service = FlutterBackgroundService();
 
-      // Ensure foreground-service notification can be posted on Android 13+,
-      // and ensure the notification channel exists before starting service.
-      await _ensureForegroundServiceNotificationReady();
-
       await service.configure(
         androidConfiguration: AndroidConfiguration(
           onStart: onBackgroundStart,
-          // IMPORTANT: Do NOT auto-start. Starting foreground service before
-          // notification permission/channel is ready can crash on some devices
-          // with "Bad notification for startForeground".
-          autoStart: false,
+          autoStart: true, // Changed to true
           isForegroundMode: true,
           notificationChannelId: 'foreground_service', // Match the channel created in main.dart
           initialNotificationTitle: 'Orado Delivery',
@@ -96,7 +88,7 @@ class SocketController extends ChangeNotifier {
           foregroundServiceNotificationId: 888,
         ),
         iosConfiguration: IosConfiguration(
-          autoStart: false,
+          autoStart: true, // Changed to true
           onForeground: onBackgroundStart,
         ),
       );
@@ -105,49 +97,6 @@ class SocketController extends ChangeNotifier {
     } catch (e) {
       log('Background service setup error: $e');
     }
-  }
-
-  Future<bool> _ensureForegroundServiceNotificationReady() async {
-    if (!Platform.isAndroid) return true;
-
-    // 1) Notification permission (Android 13+)
-    try {
-      final status = await Permission.notification.status;
-      if (!status.isGranted) {
-        final result = await Permission.notification.request();
-        if (!result.isGranted) {
-          log('❌ Notification permission not granted; cannot start foreground service safely');
-          return false;
-        }
-      }
-    } catch (e) {
-      log('⚠️ Notification permission check/request failed: $e');
-      // If we can't confirm, be conservative and avoid starting the service.
-      return false;
-    }
-
-    // 2) Ensure the foreground-service channel exists
-    try {
-      const AndroidNotificationChannel channel = AndroidNotificationChannel(
-        'foreground_service',
-        'Foreground Service',
-        description: 'Background location service',
-        importance: Importance.low,
-        playSound: false,
-        enableVibration: false,
-      );
-
-      final androidPlugin =
-          _notificationsPlugin.resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>();
-      await androidPlugin?.createNotificationChannel(channel);
-    } catch (e) {
-      log('⚠️ Failed to create foreground service notification channel: $e');
-      // Channel missing can cause "Bad notification for startForeground"
-      return false;
-    }
-
-    return true;
   }
 
   @pragma('vm:entry-point')
@@ -475,8 +424,6 @@ class SocketController extends ChangeNotifier {
       bool isRunning = await service.isRunning();
 
       if (!isRunning) {
-        final ok = await _ensureForegroundServiceNotificationReady();
-        if (!ok) return;
         await service.startService();
         log('✅ Background service started');
       } else {
