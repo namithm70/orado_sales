@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'; // ✅ ADDED
 import 'package:oradosales/core/app/app_route.dart';
 import 'package:permission_handler/permission_handler.dart'; // ✅ ADDED
@@ -28,7 +27,6 @@ import 'package:oradosales/presentation/orders/provider/order_response_controlle
 import 'package:oradosales/presentation/home/home/provider/available_provider.dart';
 import 'package:oradosales/presentation/home/home/provider/drawer_controller.dart';
 import 'package:oradosales/presentation/socket_io/socket_controller.dart';
-import 'package:oradosales/presentation/splash_Screen/splash_screen.dart';
 import 'package:oradosales/presentation/user/controller/user_controller.dart';
 import 'package:oradosales/services/api_services.dart';
 import 'package:oradosales/services/app_life_cycle_handler.dart';
@@ -98,7 +96,10 @@ void main() async {
     final sharedPreferences = await SharedPreferences.getInstance();
     log('SharedPreferences initialized');
 
-    final token = sharedPreferences.getString("token");
+    // Prefer the new key, but keep backward compatibility with older builds.
+    final token =
+        sharedPreferences.getString("userToken") ??
+        sharedPreferences.getString("token");
     if (token != null) {
       APIServices.headers.addAll({'Authorization': 'Bearer $token'});
       log('API token loaded');

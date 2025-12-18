@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:oradosales/presentation/auth/service/login_reg_service.dart';
 import 'package:oradosales/presentation/notification_fcm/service/fcm_service.dart';
 import 'package:oradosales/core/app/app_ui_state.dart';
+import 'package:oradosales/services/api_services.dart';
 
 class AuthController extends ChangeNotifier {
   final AgentService _agentService = AgentService();
@@ -41,9 +42,13 @@ class AuthController extends ChangeNotifier {
   Future<void> _saveLoginData(String token, String agentId) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('userToken', token);
+    // Backward compatible key used in some legacy places (e.g. `main.dart` / old services).
+    await prefs.setString('token', token);
     await prefs.setString('agentId', agentId);
     _token = token;
     _agentId = agentId;
+    // Keep legacy API service header in sync for the current runtime session.
+    APIServices.headers.addAll({'Authorization': 'Bearer $token'});
     log('Login data saved.');
     notifyListeners();
   }
@@ -54,6 +59,7 @@ class AuthController extends ChangeNotifier {
     _token = null;
     _agentId = null;
     _message = 'Stored data cleared!';
+    APIServices.headers.remove('Authorization');
     log('All SharedPreferences cleared.');
     notifyListeners();
   }
@@ -95,6 +101,7 @@ class AuthController extends ChangeNotifier {
 
     try {
       final response = await _agentService.login(identifier, password);
+      _agent = response.agent;
       await _saveLoginData(response.token, response.agent.id);
       _message = response.message;
 

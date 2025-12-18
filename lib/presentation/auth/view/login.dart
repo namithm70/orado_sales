@@ -1,6 +1,5 @@
 import 'package:oradosales/presentation/auth/provider/user_provider.dart';
 import 'package:oradosales/presentation/auth/view/reg.dart';
-import 'package:oradosales/presentation/home/main_screen.dart';
 import 'package:oradosales/widgets/custom_button.dart';
 import 'package:oradosales/widgets/custom_container.dart';
 import 'package:oradosales/widgets/text_formfield.dart';
@@ -111,24 +110,24 @@ class _LoginScreenState extends State<LoginScreen> {
                               },
                             ),
                         const SizedBox(height: 16),
-                        // if (authController.message.isNotEmpty)
-                        //   Padding(
-                        //     padding: const EdgeInsets.only(bottom: 16.0),
-                        //     child: Text(
-                        //       authController.message,
-                        //       style: TextStyle(
-                        //         color:
-                        //             authController.message.contains(
-                        //                   'successful',
-                        //                 )
-                        //                 ? Colors.green
-                        //                 : Colors.red,
-                        //         fontSize: 14,
-                        //         fontWeight: FontWeight.bold,
-                        //       ),
-                        //       textAlign: TextAlign.center,
-                        //     ),
-                        //   ),
+                        if (authController.message.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 16.0),
+                            child: Text(
+                              authController.message,
+                              style: TextStyle(
+                                color:
+                                    authController.message
+                                            .toLowerCase()
+                                            .contains('success')
+                                        ? Colors.green
+                                        : Colors.red,
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
                         GestureDetector(
                           onTap: () {
                             Navigator.push(

@@ -110,7 +110,13 @@ class AgentService {
   Future<LoginResponse> login(String identifier, String password) async {
     final url = Uri.parse(ApiConstants.loginAgent());
     final headers = {'Content-Type': 'application/json'};
-    final body = jsonEncode({'identifier': identifier, 'password': password});
+    // Some backends use `input` (or other key) instead of `identifier`.
+    // Sending both keeps compatibility without breaking servers that ignore unknown fields.
+    final body = jsonEncode({
+      'identifier': identifier,
+      'input': identifier,
+      'password': password,
+    });
 
     try {
       final response = await http.post(url, headers: headers, body: body);
@@ -118,19 +124,31 @@ class AgentService {
       if (response.statusCode == 200) {
         // If the server returns a 200 OK response, parse the JSON.
         final Map<String, dynamic> responseData = jsonDecode(response.body);
-        ('Login API Success Response: $responseData');
+        log('Login API Success Response: $responseData');
         return LoginResponse.fromJson(responseData);
       } else {
         // If the server did not return a 200 OK response,
         // throw an exception with the error message from the server.
-        final Map<String, dynamic> errorData = jsonDecode(response.body);
-        ('Login API Error Response (${response.statusCode}): $errorData');
-        throw Exception(errorData['message'] ?? 'Failed to login');
+        try {
+          final Map<String, dynamic> errorData = jsonDecode(response.body);
+          log(
+            'Login API Error Response (${response.statusCode}): $errorData',
+          );
+          throw Exception(errorData['message'] ?? 'Failed to login');
+        } catch (_) {
+          // Non-JSON error responses (HTML/plain text) shouldn't mask the real error.
+          log(
+            'Login API Non-JSON Error Response (${response.statusCode}): ${response.body}',
+          );
+          throw Exception(
+            'Login failed (${response.statusCode}). Please try again.',
+          );
+        }
       }
     } catch (e) {
       // Handle network errors or other exceptions
-      ('Login API Network/Other Error: $e');
-      throw Exception('Network error: $e');
+      log('Login API Network/Other Error: $e');
+      throw Exception(e.toString().replaceFirst('Exception: ', ''));
     }
   }
 

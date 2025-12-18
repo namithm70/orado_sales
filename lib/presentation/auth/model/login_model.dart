@@ -19,10 +19,10 @@ class LoginAgent {
 
   factory LoginAgent.fromJson(Map<String, dynamic> json) {
     return LoginAgent(
-      id: json['_id'] ?? '',
+      id: (json['_id'] ?? json['id'] ?? json['agentId'] ?? '').toString(),
       fullName: json['fullName'] ?? '',
       email: json['email'] ?? '',
-      phoneNumber: json['phoneNumber'] ?? '',
+      phoneNumber: (json['phoneNumber'] ?? json['phone'] ?? '').toString(),
       profilePicture: json['profilePicture'],
       role: json['role'] ?? '',
       applicationStatus: json['applicationStatus'] ?? '',
@@ -44,11 +44,20 @@ class LoginResponse {
   });
 
   factory LoginResponse.fromJson(Map<String, dynamic> json) {
+    final dynamic rawAgent =
+        json['agent'] ??
+        json['user'] ??
+        json['data'] ??
+        json['profile'];
+
+    final Map<String, dynamic> agentMap =
+        rawAgent is Map<String, dynamic> ? rawAgent : <String, dynamic>{};
+
     return LoginResponse(
       statusCode: json['statusCode'] ?? 200,
       message: json['message'] ?? '',
       token: json['token'] ?? '',
-      agent: LoginAgent.fromJson(json['agent'] ?? {}),
+      agent: LoginAgent.fromJson(agentMap),
     );
   }
 }
