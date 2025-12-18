@@ -2,6 +2,7 @@ import 'dart:developer';
 
 import 'package:oradosales/presentation/orders/provider/order_provider.dart';
 import 'package:flutter/material.dart';
+import 'package:oradosales/presentation/orders/view/delivery_task_bottom_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:oradosales/presentation/orders/model/product_model.dart';
 import 'package:oradosales/presentation/orders/view/order_details_screen.dart';
@@ -174,7 +175,7 @@ String getStatusActionLabel(String status) {
                               MaterialPageRoute(
                                 builder:
                                     (context) =>
-                                        OrderDetailsBottomSheet(orderId: order.id!,),
+                                        OrderDetailsScreen(order: order.id!,),
                             ));
                           },
                           child: Padding(
